@@ -1,0 +1,16 @@
+<node id="16777216">
+	<attribute name="Name" value="window1"/>
+	<component id="16777216" type="StaticModel">
+		<attribute name="Model" value="Model;window1.mdl"/>
+		<attribute name="Material" value="Material;window-frame.xml;glass.xml"/>
+	</component>
+	<component id="16777217" type="RigidBody">
+		<attribute name="Collision Layer" value="2"/>
+		<attribute name="Use Gravity" value="false"/>
+	</component>
+	<component id="16777218" type="CollisionShape">
+		<attribute name="Shape Type" value="Box"/>
+		<attribute name="Size" value="0.12 1.2 1.2"/>
+		<attribute name="Offset Position" value="3.1665e-08 0.6 -2.98023e-08"/>
+	</component>
+</node>

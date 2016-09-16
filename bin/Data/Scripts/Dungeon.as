@@ -382,8 +382,8 @@ void Start()
     minimap_cam_node.LookAt(Vector3(0.0, 0.0, 0.0));
 
     Camera@ camera = cam_node.CreateComponent("Camera");
-    camera.farClip = 30.0f;
 
+    camera.farClip = 300.0f;
     renderer.numViewports = 2;
     renderer.viewports[0] = Viewport(sc, camera);
     renderer.viewports[1] = Viewport(sc, minimap_camera, IntRect(graphics.width * 2 / 3, 32, graphics.width - 32, graphics.height / 3));

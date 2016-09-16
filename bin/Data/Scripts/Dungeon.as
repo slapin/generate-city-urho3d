@@ -4,6 +4,7 @@
 Scene@ sc;
 Node@ cam_node;
 Node@ charNode;
+Node@ minimap_cam_node = Node();
 
 const int CTRL_FORWARD = 1;
 const int CTRL_BACK = 2;
@@ -371,9 +372,20 @@ void Start()
     sc.physicsWorld.DrawDebugGeometry(true);
     renderer.DrawDebugGeometry(true);
     cam_node = Node();
+
+    Camera@ minimap_camera = minimap_cam_node.CreateComponent("Camera");
+    minimap_camera.farClip = 300.0f;
+    minimap_camera.orthographic = true;
+    minimap_camera.zoom = 0.3;
+    minimap_cam_node.position = Vector3(0.0, 200.0f, 0.0);
+    minimap_cam_node.LookAt(Vector3(0.0, 0.0, 0.0));
+
     Camera@ camera = cam_node.CreateComponent("Camera");
     camera.farClip = 30.0f;
+
+    renderer.numViewports = 2;
     renderer.viewports[0] = Viewport(sc, camera);
+    renderer.viewports[1] = Viewport(sc, minimap_camera, IntRect(graphics.width * 2 / 3, 32, graphics.width - 32, graphics.height / 3));
     Node@ zoneNode = sc.CreateChild("Zone");
     Zone@ zone = zoneNode.CreateComponent("Zone");
     zone.boundingBox = BoundingBox(-1000.0f, 1000.0f);
@@ -453,6 +465,7 @@ void HandlePostUpdate(StringHash eventType, VariantMap& eventData)
     // This could be expanded to look at an arbitrary target, now just look at a point in front
     Vector3 headWorldTarget = headNode.worldPosition + headDir * Vector3(0.0f, 0.0f, -1.0f);
     headNode.LookAt(headWorldTarget, Vector3(0.0f, 1.0f, 0.0f));
+    minimap_cam_node.position = Vector3(headNode.worldPosition.x, minimap_cam_node.position.y, headNode.worldPosition.z);
     if (firstPerson)
     {
         // First person camera: position to the head bone + offset slightly forward & up

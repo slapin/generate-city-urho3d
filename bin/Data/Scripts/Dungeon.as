@@ -170,8 +170,10 @@ void HandleKeyDown(StringHash eventType, VariantMap& eventData)
         console.Toggle();
         
     // Toggle debug HUD with F2
-    else if (key == KEY_F2)
+    else if (key == KEY_F2) {
         debugHud.ToggleAll();
+        debug_render = !debug_render;
+    }
 
     // Common rendering quality controls, only when UI has no focused element
     else if (ui.focusElement is null)
@@ -369,8 +371,7 @@ void Start()
     sc.CreateComponent("Octree");
     sc.CreateComponent("PhysicsWorld");
     sc.CreateComponent("DebugRenderer");
-    sc.physicsWorld.DrawDebugGeometry(true);
-    renderer.DrawDebugGeometry(true);
+    
     cam_node = Node();
 
     Camera@ minimap_camera = minimap_cam_node.CreateComponent("Camera");
@@ -441,9 +442,14 @@ void Start()
     CreateCharacter();
 }
 
+bool debug_render = false;
+
 void HandlePostRenderUpdate()
 {
-    renderer.DrawDebugGeometry(false);
+    if (debug_render) {
+        renderer.DrawDebugGeometry(false);
+        sc.physicsWorld.DrawDebugGeometry(true);
+    }
 }
 
 void HandlePostUpdate(StringHash eventType, VariantMap& eventData)

@@ -299,6 +299,7 @@ class Facade : ScratchModel {
 //        body.collisionMask = 1;
 //        CollisionShape@ shape = node.CreateComponent("CollisionShape");
 //        shape.SetTriangleMesh(model, 0);
+        StaticModel@ win_sm = node.CreateComponent("StaticModel");
         win_sm.model = window_model;
     }
 }

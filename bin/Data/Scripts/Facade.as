@@ -136,24 +136,14 @@ class Facade : ScratchModel {
         }
         return ret;
     }
-    Node@ create_window()
+    Node@ create_window(Material@ mat1, Material@ mat2)
     {
         Node@ ret = Node();
         Model@ win_model = cache.GetResource("Model", "Models/window/window1.mdl");
-        // Material@ win_mat1 = cache.GetResource("Material", "Models/window/window-frame.xml");
-        Material@ win_mat1 = Material();
-        // Material@ win_mat2 = cache.GetResource("Material", "Models/window/glass.xml");
-        Material@ win_mat2 = Material();
-        win_mat1.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
-        win_mat1.shaderParameters["MatDiffColor"] =  Variant(Vector4(0.166, 0.006, 0.0056, 1.0));
-        win_mat1.shaderParameters["MatSpecColor"] =  Variant(Vector4(0.08, 0.08, 0.08, 8.0));
-        win_mat2.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
-        win_mat2.shaderParameters["MatDiffColor"] =  Variant(Vector4(0.64, 0.64, 0.64, 0.3));
-        win_mat2.shaderParameters["MatSpecColor"] =  Variant(Vector4(0.3, 0.3, 0.3, 8.0));
         StaticModel@ obj = ret.CreateComponent("StaticModel");
         obj.model = win_model;
-        // obj.materials[0] =  win_mat1;
-        // obj.materials[1] = win_mat2;
+        obj.materials[0] =  mat1;
+        obj.materials[1] = mat2;
         obj.occluder = true;
         obj.occludee = true;
 //        RigidBody@ body = ret.CreateComponent("RigidBody");
@@ -183,7 +173,16 @@ class Facade : ScratchModel {
                 // finals
                 add_result(item_type, item_rect);
         }
+        Model@ window_model = Model();
         Vector3 offt;
+        Material@ win_mat1 = Material();
+        Material@ win_mat2 = Material();
+        win_mat1.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
+        win_mat1.shaderParameters["MatDiffColor"] =  Variant(Vector4(0.166, 0.006, 0.0056, 1.0));
+        win_mat1.shaderParameters["MatSpecColor"] =  Variant(Vector4(0.08, 0.08, 0.08, 8.0));
+        win_mat2.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
+        win_mat2.shaderParameters["MatDiffColor"] =  Variant(Vector4(0.64, 0.64, 0.64, 0.3));
+        win_mat2.shaderParameters["MatSpecColor"] =  Variant(Vector4(0.3, 0.3, 0.3, 8.0));
         for (int i = 0; i < result.length; i++) {
             offt = Vector3(result[i].rect.left + result[i].rect.size.x / 2.0 , result[i].rect.top, 0.0);
             switch(result[i].type) {
@@ -193,7 +192,7 @@ class Facade : ScratchModel {
                 add_quad1(result[i].rect.size.x,
                     result[i].rect.size.y, 0.0, offt);
                 if (result[i].rect.size.y >= min_floor_height) {
-                    Node@ win = create_window();
+                    Node@ win = create_window(win_mat1, win_mat2);
                     node.AddChild(win);
                     win.position = offt + Vector3(0.0, result[i].rect.size.y / 2.0 - 0.6 /* hack!!! */, 0.0);
                     win.rotation = Quaternion(0.0, 90, 0.0);
@@ -206,7 +205,7 @@ class Facade : ScratchModel {
 
         bbox = BoundingBox(Vector3(-w/2 - 0.01, -0.01,  -d/2.0 - 0.01), Vector3(w/2 + 0.01, h + 0.01, d/2.0 + 0.01));
         create();
-        // object.material = mat;
+        object.material = mat;
         object.castShadows = true;
         object.occluder = true;
         object.occludee = true;
@@ -215,6 +214,7 @@ class Facade : ScratchModel {
 //        body.collisionMask = 1;
 //        CollisionShape@ shape = node.CreateComponent("CollisionShape");
 //        shape.SetTriangleMesh(model, 0);
+        win_sm.model = window_model;
     }
 }
 

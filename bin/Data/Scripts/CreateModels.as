@@ -268,10 +268,10 @@ class RoadItem : ScratchModel {
         add_quad5(w, l, 0);
         bbox = BoundingBox(Vector3(-w/2 - 0.01, -0.01, -l/2 - 0.01), Vector3(w/2 + 0.01, h + 0.01, l/2.0 + 0.01));
         create();
-        // object.material = mat;
         object.castShadows = true;
         object.occluder = true;
         object.occludee = true;
+        object.material = mat;
 //        RigidBody@ body = node.CreateComponent("RigidBody");
 //        body.collisionLayer = 2;
 //        body.collisionMask = 1;

@@ -273,7 +273,7 @@ class Facade : ScratchModel {
                     Model@ cw = cache.GetResource("Model", "Models/window/window1.mdl");
                     int geom_start = window_model.numGeometries;
                     window_model.numGeometries += cw.numGeometries;
-                    for (int j = 0; i < cw.numGeometries; j++)
+                    for (int j = 0; j < cw.numGeometries; j++)
                         window_model.SetGeometry(geom_start + i, 0, cw.GetGeometry(i, 0));
                 }
                 break;

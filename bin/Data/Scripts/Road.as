@@ -242,21 +242,32 @@ class RoadGen : ScratchModel {
         Facade@ fac1 = Facade(r.size.x, h, 0.2, mat);
         ret.AddChild(fac1.node);
         fac1.node.position = Vector3(0.0, 0.0, r.size.y / 2.0);
+        CollisionShape@ shape1 = ret.CreateComponent("CollisionShape");
+        shape1.SetTriangleMesh(fac1.model, 0, Vector3(1.0, 1.0, 1.0), fac1.node.position);
         Facade@ fac2 = Facade(r.size.x, h, 0.2, mat);
         ret.AddChild(fac2.node);
         fac2.node.position = Vector3(0.0, 0.0, -r.size.y / 2.0);
         fac2.node.rotation = Quaternion(0.0, 180.0f, 0.0);
+        CollisionShape@ shape2 = ret.CreateComponent("CollisionShape");
+        shape2.SetTriangleMesh(fac2.model, 0, Vector3(1.0, 1.0, 1.0), fac2.node.position, fac2.node.rotation);
         Facade@ fac3 = Facade(r.size.y, h, 0.2, mat);
         ret.AddChild(fac3.node);
         fac3.node.position = Vector3(-r.size.x / 2.0, 0.0, 0.0);
         fac3.node.rotation = Quaternion(0.0, -90.0f, 0.0);
+        CollisionShape@ shape3 = ret.CreateComponent("CollisionShape");
+        shape3.SetTriangleMesh(fac3.model, 0, Vector3(1.0, 1.0, 1.0), fac3.node.position, fac3.node.rotation);
         Facade@ fac4 = Facade(r.size.y, h, 0.2, mat);
         fac4.node.position = Vector3(r.size.x / 2.0, 0.0, 0.0);
         fac4.node.rotation = Quaternion(0.0, 90.0f, 0.0);
+        CollisionShape@ shape4 = ret.CreateComponent("CollisionShape");
+        shape4.SetTriangleMesh(fac4.model, 0, Vector3(1.0, 1.0, 1.0), fac4.node.position, fac4.node.rotation);
         ret.AddChild(fac4.node);
         ret.position = Vector3(r.rect.left + r.size.x / 2.0,
                                       0,
                                       r.rect.top + r.size.y / 2.0);
+        RigidBody@ body = ret.CreateComponent("RigidBody");
+        body.collisionLayer = 2;
+        body.collisionMask = 1;
         return ret;
     }
     
@@ -294,17 +305,27 @@ class RoadGen : ScratchModel {
         Material@ building_material = Material();
         building_material.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
         building_material.shaderParameters["MatDiffColor"] = Variant(Vector4(0.6, 0.4, 0.8, 1.0));
+        RigidBody @body = node.CreateComponent("RigidBody");
+        body.collisionLayer = 2;
+        body.collisionMask = 1;
         for (int i = 0; i < result.length; i++) {
+            CollisionShape@ shape = node.CreateComponent("CollisionShape");
             Node @prect;
+            StaticModel@ sm;
             switch(result[i].type) {
             case ITEM_LANE:
                 prect = render_rect(result[i], road_lane_height, lane_material);
+                sm = prect.GetComponent("StaticModel");
+        	shape.SetTriangleMesh(sm.model, 0, Vector3(1.0, 1.0, 1.0), prect.position);
+
                 node.AddChild(prect);
                 break;
             case ITEM_SIDEWALK:
                 prect = render_rect(result[i], road_sidewalk_height, sidewalk_material);
                 node.AddChild(prect);
                 node.position += Vector3(0.0, road_lane_height, 0.0);
+                sm = prect.GetComponent("StaticModel");
+        	shape.SetTriangleMesh(sm.model, 0, Vector3(1.0, 1.0, 1.0), prect.position);
                 break;
             case ITEM_CHUNK:
             case ITEM_CITY_MID_ROADL1:

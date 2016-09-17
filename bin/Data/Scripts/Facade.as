@@ -24,6 +24,80 @@ class FacadeChunk {
        return ret;
     }
 }
+
+class DissectModel {
+    String name;
+    Model@ model;
+    Geometry@ geometry;
+    VertexBuffer@[] buffers;
+    float[] vertex_data;
+    uint16[] index_data;
+    VectorBuffer[] vertexdata;
+    Array<Vector3> verts;
+    IndexBuffer@ ib;
+    uint16[] index;
+    DissectModel(String fn, int geonum)
+    {
+        model = cache.GetResource("Model", fn);
+        geometry = model.GetGeometry(geonum, 0);
+        ib = geometry.indexBuffer;
+        VectorBuffer indexdata = ib.GetData();
+        Print("numGeometries: " + String(model.numGeometries));
+        Print("indexCount: " + String(geometry.indexCount));
+        Print("indexStart: " + String(geometry.indexStart));
+        Print("vertexCount: " + String(geometry.vertexCount));
+        Print("vertexStart: " + String(geometry.vertexStart));
+        Print("numVertexBuffers: " + String(geometry.numVertexBuffers));
+        Print("primitive: " + String(geometry.primitiveType));
+        Print("primitive: " + String(TRIANGLE_LIST));
+        Print("primitive: " + String(LINE_LIST));
+        Print("primitive: " + String(POINT_LIST));
+        Print("primitive: " + String(TRIANGLE_STRIP));
+        Print("primitive: " + String(LINE_STRIP));
+        Print("primitive: " + String(TRIANGLE_FAN));
+        for(int i = 0; i < geometry.numVertexBuffers; i++) {
+            buffers.Push(geometry.vertexBuffers[i]);
+            vertexdata.Push(geometry.vertexBuffers[i].GetData());
+            uint num_verts = geometry.vertexBuffers[i].vertexCount;
+            uint vertex_size = geometry.vertexBuffers[i].vertexSize;
+            Print("num_verts: " + String(num_verts));
+            Print("vertexSize: " + String(vertex_size));
+            if (buffers[i].HasElement(TYPE_VECTOR3, SEM_POSITION))
+                Print("Has position at " +
+                    String(buffers[i].GetElementOffset(TYPE_VECTOR3, SEM_POSITION)));
+            else
+                continue;
+            if (buffers[i].HasElement(TYPE_VECTOR3, SEM_NORMAL))
+                Print("Has normal at " +
+                    String(buffers[i].GetElementOffset(TYPE_VECTOR3, SEM_NORMAL)));
+            else
+                continue;
+            if (buffers[i].HasElement(TYPE_VECTOR2, SEM_TEXCOORD))
+                Print("Has texture coordinate  at " +
+                    String(buffers[i].GetElementOffset(TYPE_VECTOR2, SEM_TEXCOORD)));
+            for (int j = 0; j < num_verts; j++) {
+                vertexdata[i].Seek(j * vertex_size + buffers[i].GetElementOffset(TYPE_VECTOR3, SEM_POSITION));
+                verts.Push(vertexdata[i].ReadVector3());
+                vertexdata[i].Seek(j * vertex_size + buffers[i].GetElementOffset(TYPE_VECTOR3, SEM_NORMAL));
+                verts.Push(vertexdata[i].ReadVector3());
+            }
+            indexdata.Seek(geometry.indexStart * ib.indexSize);
+            for (int j = 0; j < geometry.indexCount; j++) {
+                uint16 idx = indexdata.ReadUShort();
+                Print("Index: " + String(j) + " idx: " + String(idx));
+                index.Push(idx);
+            }
+        }
+    }
+    Array<Vector3> get_vertices(Vector3 offt = Vector3())
+    {
+        Array<Vector3> ret;
+        for(int i = 0; i < index.length; i++) {
+            ret.Push(verts[index[i] * 2] + offt);
+        }
+        return ret;
+    }
+}
 const float min_floor_height = 2.5;
 const float min_solid_width = 20.0;
 const float min_window_width = 1.8;
@@ -196,9 +270,20 @@ class Facade : ScratchModel {
                     node.AddChild(win);
                     win.position = offt + Vector3(0.0, result[i].rect.size.y / 2.0 - 0.6 /* hack!!! */, 0.0);
                     win.rotation = Quaternion(0.0, 90, 0.0);
+                    Model@ cw = cache.GetResource("Model", "Models/window/window1.mdl");
+                    int geom_start = window_model.numGeometries;
+                    window_model.numGeometries += cw.numGeometries;
+                    for (int j = 0; i < cw.numGeometries; j++)
+                        window_model.SetGeometry(geom_start + i, 0, cw.GetGeometry(i, 0));
                 }
                 break;
             }
+        }
+        DissectModel@ dm = DissectModel("Models/window/window1.mdl", 0);
+        Array<Vector3> vs = dm.get_vertices();
+        for (int i = 0; i < vs.length; i++) {
+            Print(String(i) + ": " + String(vs[i].x) + " " + String(vs[i].y) + " " + String(vs[i].z));
+            add_vertex(vs[i]);
         }
         add_quad1(d, h, 0.0, Vector3(-w/2.0 + d/2.0, 0.0, 0.0));
         add_quad1(d, h, 0.0, Vector3(w/2.0 - d/2.0, 0.0, 0.0));

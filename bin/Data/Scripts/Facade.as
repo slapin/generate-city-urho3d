@@ -102,6 +102,8 @@ const float min_floor_height = 2.5;
 const float min_solid_width = 20.0;
 const float min_window_width = 1.8;
 class Facade : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float width;
     float height;
     float depth;

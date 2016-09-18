@@ -39,6 +39,8 @@ const float road_lane_height = 0.05;
 const float road_sidewalk_width = 1.5;
 const float road_sidewalk_height = 0.1;
 class RoadGen : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     Array<String> type2str = {
         "city",
         "city_middle_road_lane1",

@@ -6,9 +6,7 @@ mixin class ScratchModel {
     {
         return vertex_data.length / 6;
     }
-    Node@ node = Node();
     Model@ model = Model();
-    StaticModel@ object;
     void create()
     {
         for (uint i = 0; i < num_vertices(); i += 3) {
@@ -120,6 +118,8 @@ mixin class ScratchModel {
 }
 
 class Triangle : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float[] vertex_data = {
         0, 0, 0,   0, 0, 0,
         0, 1, 0,   0, 0, 0,
@@ -136,6 +136,8 @@ class Triangle : ScratchModel {
 }
 
 class HTriangle : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float[] vertex_data = {
         0, 0, 0,   0, 0, 0,
         0, 0, 1,   0, 0, 0,
@@ -152,6 +154,8 @@ class HTriangle : ScratchModel {
 }
 
 class Quad : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float[] vertex_data = {
         0, 0, 0,   0, 0, 0,
         0, 1, 0,   0, 0, 0,
@@ -170,6 +174,8 @@ class Quad : ScratchModel {
     }
 }
 class HQuad : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float[] vertex_data = {
         0, 0, 0,   0, 0, 0,
         0, 0, 1,   0, 0, 0,
@@ -188,6 +194,8 @@ class HQuad : ScratchModel {
     }
 }
 class Cube : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
     float[] vertex_data = {
         // top
         0, 1, 0,   0, 0, 0,
@@ -251,6 +259,8 @@ class Cube : ScratchModel {
 }
 
 class RoadItem : ScratchModel {
+    Node@ node = Node();
+    StaticModel@ object;
 //    float[] vertex_data = {
 //    };
 //    uint16[] index_data = {

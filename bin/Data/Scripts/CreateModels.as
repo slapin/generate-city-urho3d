@@ -48,8 +48,6 @@ mixin class ScratchModel {
         model.numGeometries = 1;
         model.SetGeometry(0, 0, geom);
         model.boundingBox = bbox;
-        object = node.CreateComponent("StaticModel");
-        object.model = model;
     }
     void add_vertex(Vector3 v)
     {
@@ -132,6 +130,8 @@ class Triangle : ScratchModel {
     Triangle()
     {
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
     }
 }
 
@@ -150,6 +150,8 @@ class HTriangle : ScratchModel {
     HTriangle()
     {
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
     }
 }
 
@@ -171,6 +173,8 @@ class Quad : ScratchModel {
     Quad()
     {
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
     }
 }
 class HQuad : ScratchModel {
@@ -191,6 +195,8 @@ class HQuad : ScratchModel {
     HQuad()
     {
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
     }
 }
 class Cube : ScratchModel {
@@ -255,6 +261,8 @@ class Cube : ScratchModel {
     Cube()
     {
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
     }
 }
 
@@ -278,6 +286,8 @@ class RoadItem : ScratchModel {
         add_quad5(w, l, 0);
         bbox = BoundingBox(Vector3(-w/2 - 0.01, -0.01, -l/2 - 0.01), Vector3(w/2 + 0.01, h + 0.01, l/2.0 + 0.01));
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
         object.castShadows = true;
         object.occluder = true;
         object.occludee = true;

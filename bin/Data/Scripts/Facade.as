@@ -292,6 +292,8 @@ class Facade : ScratchModel {
 
         bbox = BoundingBox(Vector3(-w/2 - 0.01, -0.01,  -d/2.0 - 0.01), Vector3(w/2 + 0.01, h + 0.01, d/2.0 + 0.01));
         create();
+        object = node.CreateComponent("StaticModel");
+        object.model = model;
         object.material = mat;
         object.castShadows = true;
         object.occluder = true;

@@ -347,7 +347,7 @@ void Start()
     graphics.windowTitle = "Dungeon";
     RoadGen roads = RoadGen();
     engine.maxFps = 60.0;
-    roads.add(ITEM_CITY, RoadRect(-500, -500, 500, 500));
+    roads.add(ITEM_CITY, RoadRect(-100, -100, 100, 100));
     roads.print_queue();
     roads.print_result();
     Node@ roads_node = roads.build();
@@ -373,9 +373,10 @@ void Start()
     sc.CreateComponent("DebugRenderer");
     
     cam_node = Node();
-
+    RenderPath@ rp = RenderPath();
+    rp.Load(cache.GetResource("XMLFile", "RenderPaths/ForwardNoClear.xml"));
     Camera@ minimap_camera = minimap_cam_node.CreateComponent("Camera");
-    minimap_camera.farClip = 300.0f;
+    minimap_camera.farClip = 600.0f;
     minimap_camera.orthographic = true;
     minimap_camera.zoom = 0.3;
     minimap_cam_node.position = Vector3(0.0, 200.0f, 0.0);
@@ -387,9 +388,10 @@ void Start()
     renderer.numViewports = 2;
     renderer.viewports[0] = Viewport(sc, camera);
     renderer.viewports[1] = Viewport(sc, minimap_camera, IntRect(graphics.width * 2 / 3, 32, graphics.width - 32, graphics.height / 3));
+    renderer.viewports[1].renderPath = rp;
     Node@ zoneNode = sc.CreateChild("Zone");
     Zone@ zone = zoneNode.CreateComponent("Zone");
-    zone.boundingBox = BoundingBox(-1000.0f, 1000.0f);
+    zone.boundingBox = BoundingBox(Vector3(-1000.0f,-10000.0, -1000.0f), Vector3(1000, 499, 1000));
     zone.ambientColor = Color(0.15f, 0.15f, 0.15f);
     zone.fogColor = Color(0.5f, 0.5f, 0.7f);
     zone.fogStart = 100.0f;
@@ -417,18 +419,7 @@ void Start()
     body.collisionLayer = 2;
     CollisionShape@ shape = floorNode.CreateComponent("CollisionShape");
     shape.SetBox(Vector3(1.0f, 1.0f, 1.0f));
-    Cube@ sm = Cube();
-    sc.AddChild(sm.node);
-    Cube@ sm1 = Cube();
-    sc.AddChild(sm1.node);
-    Cube@ sm2 = Cube();
-    sc.AddChild(sm2.node);
-    Cube@ sm3 = Cube();
-    sc.AddChild(sm3.node);
-    sm.node.position = Vector3(3.0, 2.0, 3.0);
-    sm1.node.position = Vector3(3.0, 2.0, -3.0);
-    sm2.node.position = Vector3(-3.0, 2.0, 3.0);
-    sm3.node.position = Vector3(-3.0, 2.0, -3.0);
+
     sc.AddChild(roads_node);
 
     // Subscribe to Update event for setting the character controls before physics simulation

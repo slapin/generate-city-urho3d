@@ -156,8 +156,8 @@ class RoadRect {
     }
     bool can_split(float msz, float sz)
     {
-        if ((size.x > sz && size.y > msz)
-                || (size.y > sz && size.x > msz))
+        if ((size.x > msz + sz && size.y > msz)
+                || (size.y > msz + sz && size.x > msz))
             return true;
         return false;
     }

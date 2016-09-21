@@ -1,5 +1,5 @@
 #include "Scripts/RoadRect.as"
-#include "Scripts/Createmodels.as"
+#include "Scripts/CreateModels.as"
 #include "Scripts/Facade.as"
 
 enum roadgen_types {
@@ -38,6 +38,7 @@ const float road_lane_width = 3.0;
 const float road_lane_height = 0.05;
 const float road_sidewalk_width = 1.5;
 const float road_sidewalk_height = 0.1;
+
 class RoadGen : ScratchModel {
     Node@ node = Node();
     StaticModel@ object;
@@ -58,11 +59,14 @@ class RoadGen : ScratchModel {
     Array<RoadChunk> result = {};
     float split_probability = 0.5;
     float max_chunk_size = 520.0;
-    float min_chunk_size = 30.0;
+    float min_chunk_size = (3.0 + 3.0) * 8.0 + 32.0;
     float max_building_size = 120.0;
-    float min_building_size = 30.0;
+    float min_building_size = (3.0 + 3.0) * 4 + 16.0;
     float sidewalk_width = 3.0;
     float lane_width = 6.0;
+    Dictionary@ building_style = {
+        {"window_distance", 1.2f}
+    };
     void add(int t, RoadRect r)
     {
         RoadChunk v;
@@ -240,30 +244,61 @@ class RoadGen : ScratchModel {
 
     Node@ render_building(RoadChunk r, float h, Material@ mat)
     {
+        Matrix4 trans;
+        Matrix4 window_rot = Matrix4();
+        Print("Building start");
+        window_rot.SetRotation(Quaternion(0.0, 90.0, 0.0).rotationMatrix);
+        DissectModel@ dm = DissectModel("Models/window/window1.mdl", 0, window_rot);
+        BoundingBox window_bb = dm.model.boundingBox;
+        Array<Vector3> vs = dm.get_vertices();
+
+        Dictionary meta = building_style;
+        meta["window_height"] = window_bb.size.y;
+        meta["window_width"] = window_bb.size.z;
+        meta["min_floor_height"] = 2.5;
+        meta["min_window_block_width"] = (float(meta["window_width"])
+                              + float(meta["window_distance"])) * 3
+                              + float(meta["window_distance"]);
+
+        Array<Vector3> positions = {
+            Vector3(0.0, 0.0, r.size.y / 2.0),
+            Vector3(0.0, 0.0, -r.size.y / 2.0),
+            Vector3(-r.size.x / 2.0, 0.0, 0.0),
+            Vector3(r.size.x / 2.0, 0.0, 0.0)
+        };
+        Array<Vector3> sizes = {
+            Vector3(r.size.x, h, 0.2),
+            Vector3(r.size.x, h, 0.2),
+            Vector3(r.size.y, h, 0.2),
+            Vector3(r.size.y, h, 0.2)
+        };
+        Array<Quaternion> rotations = {
+            Quaternion(0.0, 0.0, 0.0),
+            Quaternion(0.0, 180.0f, 0.0),
+            Quaternion(0.0, -90.0f, 0.0),
+            Quaternion(0.0, 90.0f, 0.0)
+        };
+
         Node@ ret = Node();
-        Facade@ fac1 = Facade(r.size.x, h, 0.2, mat);
-        ret.AddChild(fac1.node);
-        fac1.node.position = Vector3(0.0, 0.0, r.size.y / 2.0);
-        CollisionShape@ shape1 = ret.CreateComponent("CollisionShape");
-        shape1.SetTriangleMesh(fac1.model, 0, Vector3(1.0, 1.0, 1.0), fac1.node.position);
-        Facade@ fac2 = Facade(r.size.x, h, 0.2, mat);
-        ret.AddChild(fac2.node);
-        fac2.node.position = Vector3(0.0, 0.0, -r.size.y / 2.0);
-        fac2.node.rotation = Quaternion(0.0, 180.0f, 0.0);
-        CollisionShape@ shape2 = ret.CreateComponent("CollisionShape");
-        shape2.SetTriangleMesh(fac2.model, 0, Vector3(1.0, 1.0, 1.0), fac2.node.position, fac2.node.rotation);
-        Facade@ fac3 = Facade(r.size.y, h, 0.2, mat);
-        ret.AddChild(fac3.node);
-        fac3.node.position = Vector3(-r.size.x / 2.0, 0.0, 0.0);
-        fac3.node.rotation = Quaternion(0.0, -90.0f, 0.0);
-        CollisionShape@ shape3 = ret.CreateComponent("CollisionShape");
-        shape3.SetTriangleMesh(fac3.model, 0, Vector3(1.0, 1.0, 1.0), fac3.node.position, fac3.node.rotation);
-        Facade@ fac4 = Facade(r.size.y, h, 0.2, mat);
-        fac4.node.position = Vector3(r.size.x / 2.0, 0.0, 0.0);
-        fac4.node.rotation = Quaternion(0.0, 90.0f, 0.0);
-        CollisionShape@ shape4 = ret.CreateComponent("CollisionShape");
-        shape4.SetTriangleMesh(fac4.model, 0, Vector3(1.0, 1.0, 1.0), fac4.node.position, fac4.node.rotation);
-        ret.AddChild(fac4.node);
+        FacadeRender@ fr = FacadeRender();
+        StaticModel@ object = ret.CreateComponent("StaticModel");
+        for (int i = 0; i < positions.length; i++) {
+            Matrix4 trans = Matrix4();
+            trans.SetRotation(rotations[i].rotationMatrix);
+            trans.SetTranslation(positions[i]);
+            Facade@ fac = Facade(sizes[i].x, sizes[i].y, sizes[i].z, meta);
+            fr.render(sizes[i].x, sizes[i].y, sizes[i].z, fac.result, Array<Vector3>(), trans);
+
+        }
+        fr.bbox = BoundingBox(Vector3(-r.size.x/2 - 0.01, -0.01,  -r.size.y/2.0 - 0.01), Vector3(r.size.x/2 + 0.01, h + 0.01, r.size.y/2.0 + 0.01));
+        fr.create();
+        object.model = fr.model;
+        object.material = mat;
+        object.castShadows = true;
+        object.occluder = true;
+        object.occludee = true;
+        CollisionShape@ shape = ret.CreateComponent("CollisionShape");
+        shape.SetTriangleMesh(fr.model, 0, Vector3(1.0, 1.0, 1.0));
         ret.position = Vector3(r.rect.left + r.size.x / 2.0,
                                       0,
                                       r.rect.top + r.size.y / 2.0);

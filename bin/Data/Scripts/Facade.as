@@ -135,8 +135,11 @@ class Facade {
     }
     FacadeChunk fetch()
     {
+        Print("fetch1");
         FacadeChunk v = queue[0];
+        Print("fetch2");
         queue.Erase(0);
+        Print("fetch3");
         return v;
     }
     Array<FacadeRect> vsplit2_rect(FacadeRect r, float b)
@@ -159,10 +162,12 @@ class Facade {
     }
     Array<FacadeChunk> hsplit2(int ltype, int rtype, float b, FacadeChunk r)
     {
+        Print("hsplit2 start");
         Array<FacadeChunk> ret;
         Array<FacadeRect> data = hsplit2_rect(r.rect, b);
         add_obj(ret, ltype, data[0]);
         add_obj(ret, rtype, data[1]);
+        Print("hsplit2 end");
         return ret;
     }
     Array<FacadeRect> hsplit3(FacadeRect rect, float l, float r)
@@ -205,6 +210,7 @@ class Facade {
     }
     Array<FacadeChunk> grow(FacadeChunk c)
     {
+        Print("grow1");
         Array<FacadeChunk> ret;
         Array<FacadeChunk> data;
         float mfh = float(settings["min_floor_height"]);
@@ -212,23 +218,29 @@ class Facade {
         float wh = float(settings["window_height"]);
         float ww = float(settings["window_width"]);
         float wd = float(settings["window_distance"]);
+        Print("grow2");
         switch(c.type) {
         case ITEM_FACADE:
+            Print("grow2: facade");
             if (c.rect.can_vsplit(mfh))
                 ret = vsplit2(ITEM_FLOOR, ITEM_FACADE, mfh, c);
             else
                 add_obj(ret, ITEM_SOLID, c.rect);
             break;
         case ITEM_FLOOR:
+            Print("grow2: floor");
             if (c.rect.can_hsplit(wbw)) {
+                Print("grow2: floor can_hsplit");
                 ret = hsplit3(ITEM_WINDOW_BLOCK, ITEM_SOLID,
                     c.rect.size.x
                     - Floor(c.rect.size.x / wbw) * wbw, c);
             } else {
+                Print("grow2: floor making solid");
                 add_obj(ret, ITEM_SOLID, c.rect);
             }
             break;
         case ITEM_WINDOW_BLOCK:
+            Print("grow2: window block");
             if (c.rect.can_vsplit(wh)) {
                 ret = vsplit3(ITEM_WINDOWS, ITEM_SOLID,
                     (c.rect.size.y - wh) / 2.0, c);
@@ -238,42 +250,40 @@ class Facade {
             break;
         case  ITEM_WINDOWS:
             {
+                Print("grow2: Windows");
                 float cl = c.rect.size.x;
                 FacadeChunk dc = c;
                 Array<FacadeChunk> d;
                 int count = -1;
+                Print("grow2: Windows1");
                 while(cl > 0.0) {
                     if (cl < ww)
                         break;
+                    Print("grow2: Windows1a");
                     d = hsplit2(ITEM_WINDOW, ITEM_WINDOWS, ww, dc);
                     add_obj(ret, ITEM_WINDOW, d[0].rect);
                     dc = d[1];
                     cl -= ww;
                     if (cl <= wd)
                         break;
+                    Print("grow2: Windows1b");
                     d = hsplit2(ITEM_SOLID, ITEM_WINDOWS, wd, dc);
+                    Print("grow2: Windows1b1");
                     add_obj(ret, ITEM_SOLID, d[0].rect);
+                    Print("grow2: Windows1b2");
                     dc = d[1];
+                    Print("grow2: Windows1b3");
                     cl -= wd;
-                    count--;
-                    if (count == 0)
-                        break;
+                    Print("grow2: Windows1c");
                 }
+                Print("grow2: Windows2");
                 if (cl > 0.0)
-                    add_obj(ret, ITEM_SOLID, d[1].rect);
+                    add_obj(ret, ITEM_SOLID, dc.rect);
+                Print("grow2: Windows3");
             }
             break;
-/*
-        case ITEM_SOLID:
-            if (c.rect.can_hsplit(min_window_width * 2)) {
-                ret = hsplit3(ITEM_WINDOW_BLOCK,
-                    ITEM_SOLID,
-                    int(c.rect.size.x / min_window_width) *
-                        min_window_width, c);
-            }
-            break;
-*/
         }
+        Print("grow3");
         return ret;
     }
 /*
@@ -300,32 +310,54 @@ class Facade {
 //    Facade(float w, float h, float d, Material@ mat, Matrix4 trans = Matrix4())
     Facade(float w, float h, float d, Dictionary meta)
     {
+        Print("Fac1");
         width = w;
         height = h;
         depth = d;
         settings = meta;
         add(ITEM_FACADE, FacadeRect(-w / 2.0 + d, 0.0, w / 2.0 - d, h));
+        Print("Fac2");
         while(!queue.empty) {
-            FacadeChunk item = fetch();
-            int item_type = item.type;
-            FacadeRect item_rect = item.rect;
-            Array<FacadeChunk>@ newchunks = grow(item);
-            if (newchunks.length != 0) {
+            Print("Fac2a");
+            FacadeChunk fitem = fetch();
+            Print("Fac2b");
+            Print("Fac2c");
+            Print("Fac2d");
+            Array<FacadeChunk> newchunks = grow(fitem);
+            Print("Fac2e");
+            Print("Fac2f length: " + String(newchunks.length));
+            if (!newchunks.empty) {
+                Print("Fac2f not empty");
                 for (int i = 0; i < newchunks.length; i++)
                     queue.Push(newchunks[i]);
+                Print("Fac2f done");
             } else
                 // finals
-                add_result(item_type, item_rect);
+                add_result(fitem.type, fitem.rect);
+            Print("Fac2g");
         }
+        Print("Fac3");
     }
 }
+class WindowPos {
+    Vector3 pos;
+    Quaternion rot;
+    WindowPos(Vector3 p, Quaternion r)
+    {
+        pos = p;
+        rot = r;
+    }
+    WindowPos()
+    {
+    }
+};
 class FacadeRender: ScratchModel {
+    Array<WindowPos> window_pos;
     void render(float width, float height, float depth, Array<FacadeChunk> result, Array<Vector3> extra_verts = Array<Vector3>(), Matrix4 trans = Matrix4())
     {
         current_geometry = 0;
         int solids = 0;
         int windows = 0;
-        Print("Render: " + String(result.length) + " results");
         for (int i = 0; i < result.length; i++) {
             Vector3 offt = Vector3(result[i].rect.left + result[i].rect.size.x / 2.0 , result[i].rect.top, 0.0);
             Matrix4 offt2 = Matrix4();
@@ -350,10 +382,11 @@ class FacadeRender: ScratchModel {
 //                    for (int j = 0; j < cw.numGeometries; j++)
 //                        window_model.SetGeometry(geom_start + i, 0, cw.GetGeometry(i, 0));
 // Window
-                    current_geometry = 1;
-                    for (int j = 0; j < extra_verts.length; j++)
-                        add_vertex(ctrans *(extra_verts[j] + Vector3(0.0, result[i].rect.size.y / 2.0 - 0.6 /* hack!!! */, 0.0)));
-
+/* Adding windows is very slow so we use instancing */
+//                    current_geometry = 1;
+//                    for (int j = 0; j < extra_verts.length; j++)
+//                        add_vertex(ctrans *(extra_verts[j] + Vector3(0.0, result[i].rect.size.y / 2.0 - 0.6 /* hack!!! */, 0.0)));
+                window_pos.Push(WindowPos(trans * offt, trans.Rotation()));
                 break;
             }
         }
@@ -362,8 +395,6 @@ class FacadeRender: ScratchModel {
         add_quad1(depth, height, 0.0, trans * offt3);
         offt3.SetTranslation(Vector3(width/2.0 - depth/2.0, 0.0, 0.0));
         add_quad1(depth, height, 0.0, trans * offt3);
-        Print("Windows: " + String(windows) + " Solids: " + String(solids));
-        Print("Verices:" + String(geom[current_geometry].num_vertices()));
 
 //        create();
 //        RigidBody@ body = node.CreateComponent("RigidBody");

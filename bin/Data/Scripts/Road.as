@@ -14,6 +14,7 @@ enum roadgen_types {
     ITEM_LOT,
     ITEM_BUILDING_SPACE,
     ITEM_BUILDING,
+    ITEM_SQUARE,
 };
 
 class RoadChunk {
@@ -39,7 +40,44 @@ const float road_lane_height = 0.05;
 const float road_sidewalk_width = 1.5;
 const float road_sidewalk_height = 0.1;
 
+class BuildingStoreItem {
+    StaticModelGroup@ model;
+    Array<Node> windows;
+    Vector2 size;
+    float height;
+    StaticModelGroup@ window_group;
+    BuildingStoreItem(Node@ node)
+    {
+        model = node.CreateComponent("StaticModelgroup");
+        window_group = node.CreateComponent("StaticModelGroup");
+    }
+    BuildingStoreItem()
+    {
+    }
+}
+
+class BuildingStore {
+    Array<BuildingStoreItem> items;
+    void add(BuildingStoreItem@ item)
+    {
+        items.Push(item);
+    }
+    BuildingStoreItem@ find(Vector2 size, float h)
+    {
+        Print("Find " + String(size.x) + String(size.y));
+        for (int i = 0; i < items.length; i++) {
+            if (items[i].size.Equals(size)) {
+                Print("Found");
+                return items[i];
+            }
+        }
+        Print("Not found");
+        return BuildingStoreItem();
+    }
+}
+
 class RoadGen : ScratchModel {
+    BuildingStore@ buildings = BuildingStore();
     Node@ node = Node();
     StaticModel@ object;
     Array<String> type2str = {
@@ -61,7 +99,7 @@ class RoadGen : ScratchModel {
     float max_chunk_size = 520.0;
     float min_chunk_size = (3.0 + 3.0) * 8.0 + 32.0;
     float max_building_size = 120.0;
-    float min_building_size = (3.0 + 3.0) * 4 + 16.0;
+    float min_building_size = (3.0 + 3.0) * 4 + 6.0;
     float sidewalk_width = 3.0;
     float lane_width = 6.0;
     Dictionary@ building_style = {
@@ -176,13 +214,26 @@ class RoadGen : ScratchModel {
         add_obj(ret, iside_type, data3[2]);
         return ret;
     }
-    Array<RoadChunk> split2_random(int type1, int type2, RoadChunk c)
+    Array<RoadChunk> split2_random(int type1, int type2, RoadChunk c, float min_chunk)
     {
         Array<RoadChunk> ret;
         float rnd = Random();
-        if (c.size.x > c.size.y)
-            rnd += 0.2;
-        if (rnd > 0.5) {
+        bool can_hsplit, can_vsplit, do_hsplit;
+        can_hsplit = c.rect.can_hsplit(min_chunk, c.size.x / 2.0);
+        can_vsplit = c.rect.can_hsplit(min_chunk, c.size.x / 2.0);
+        if (can_hsplit && !can_vsplit)
+            do_hsplit = true;
+        else if (!can_hsplit && can_vsplit)
+            do_hsplit = false;
+        else if (c.size.x > c.size.y * 2.0)
+            do_hsplit = true;
+        else if (c.size.y > c.size.x * 2.0)
+            do_hsplit = false;
+        else if (rnd > 0.5)
+            do_hsplit = true;
+        else
+            do_hsplit = false;
+        if (do_hsplit) {
             Array<RoadRect> data = c.rect.split2l(c.size.x / 2.0);
             add_obj(ret, type1, data[0]);
             add_obj(ret, type2, data[1]);
@@ -209,10 +260,10 @@ class RoadGen : ScratchModel {
             break;
         case ITEM_CHUNK:
             if (c.rect.can_split(min_chunk_size, max_chunk_size))
-                ret = split2_random(ITEM_CHUNK, ITEM_CHUNK, c);
+                ret = split2_random(ITEM_CHUNK, ITEM_CHUNK, c, min_chunk_size);
             else if (c.rect.can_split(min_chunk_size, min_chunk_size)
                      && Random() >= split_probability)
-                ret = split2_random(ITEM_CHUNK, ITEM_CHUNK, c);
+                ret = split2_random(ITEM_CHUNK, ITEM_CHUNK, c, min_chunk_size);
             else
                 ret = split9(ITEM_SPACE, ITEM_LANE, lane_width, c);
             break;
@@ -220,11 +271,14 @@ class RoadGen : ScratchModel {
             ret = split9(ITEM_LOT, ITEM_SIDEWALK, sidewalk_width, c);
             break;
         case ITEM_LOT:
-            if (c.rect.can_split(min_building_size, max_building_size))
-                ret = split2_random(ITEM_LOT, ITEM_LOT, c);
+            if (c.rect.size.x < min_building_size ||
+                c.rect.size.y < min_building_size)
+                add_obj(ret, ITEM_SQUARE, c.rect);
+            else if (c.rect.can_split(min_building_size, max_building_size))
+                ret = split2_random(ITEM_LOT, ITEM_LOT, c, min_building_size);
             else if (c.rect.can_split(min_building_size, min_building_size)
                      && Random() >= split_probability)
-                ret = split2_random(ITEM_LOT, ITEM_LOT, c);
+                ret = split2_random(ITEM_LOT, ITEM_LOT, c, min_building_size);
             else
                 ret = split9(ITEM_BUILDING_SPACE, ITEM_SIDEWALK, sidewalk_width, c);
             break;
@@ -242,8 +296,15 @@ class RoadGen : ScratchModel {
         return ritem.node;
     }
 
-    Node@ render_building(RoadChunk r, float h, Material@ mat)
+    Node@ render_building(RoadChunk r, float h, Material@ mat,
+        Material@ mat1, Material@ mat2)
     {
+        BuildingStoreItem bsitem;
+        Node@ ret = Node();
+        Print(String(r.size.x) + " " + String(r.size.y));
+        bsitem = buildings.find(r.size, h);
+        if (bsitem.model is null)
+            bsitem = BuildingStoreItem(ret);
         Matrix4 trans;
         Matrix4 window_rot = Matrix4();
         Print("Building start");
@@ -251,6 +312,12 @@ class RoadGen : ScratchModel {
         DissectModel@ dm = DissectModel("Models/window/window1.mdl", 0, window_rot);
         BoundingBox window_bb = dm.model.boundingBox;
         Array<Vector3> vs = dm.get_vertices();
+        if (bsitem is null) {
+            bsitem = BuildingStoreItem(ret);
+            bsitem.size = r.size;
+            bsitem.height = h;
+        }
+        Print("1");
 
         Dictionary meta = building_style;
         meta["window_height"] = window_bb.size.y;
@@ -279,32 +346,64 @@ class RoadGen : ScratchModel {
             Quaternion(0.0, 90.0f, 0.0)
         };
 
-        Node@ ret = Node();
         FacadeRender@ fr = FacadeRender();
-        StaticModel@ object = ret.CreateComponent("StaticModel");
-        for (int i = 0; i < positions.length; i++) {
-            Matrix4 trans = Matrix4();
-            trans.SetRotation(rotations[i].rotationMatrix);
-            trans.SetTranslation(positions[i]);
-            Facade@ fac = Facade(sizes[i].x, sizes[i].y, sizes[i].z, meta);
-            fr.render(sizes[i].x, sizes[i].y, sizes[i].z, fac.result, Array<Vector3>(), trans);
-
-        }
-        fr.bbox = BoundingBox(Vector3(-r.size.x/2 - 0.01, -0.01,  -r.size.y/2.0 - 0.01), Vector3(r.size.x/2 + 0.01, h + 0.01, r.size.y/2.0 + 0.01));
-        fr.create();
-        object.model = fr.model;
-        object.material = mat;
-        object.castShadows = true;
-        object.occluder = true;
-        object.occludee = true;
+        bsitem.window_group.model = cache.GetResource("Model", "Models/window/window1.mdl");
+        bsitem.window_group.materials[0] = mat1;
+        bsitem.window_group.materials[1] = mat2;
+        bsitem.window_group.castShadows = true;
+        bsitem.window_group.occludee = true;
+        Print("2");
+        
+        if (bsitem.model.model is null) {
+            Print("2a");
+            for (int i = 0; i < positions.length; i++) {
+                Print("2a1");
+                Matrix4 trans = Matrix4();
+                Print("2a2");
+                trans.SetRotation(rotations[i].rotationMatrix);
+                Print("2a3");
+                trans.SetTranslation(positions[i]);
+                Print("2a4");
+                Print("Facade: " + String(i));
+                Facade@ fac = Facade(sizes[i].x, sizes[i].y, sizes[i].z, meta);
+                Print("2a5");
+                fr.render(sizes[i].x, sizes[i].y, sizes[i].z, fac.result, Array<Vector3>(), trans);
+                Print("2a6");
+            }
+            Print("2b");
+            for (int j = 0; j < fr.window_pos.length; j++) {
+                Node@ win_node = ret.CreateChild("window");
+                win_node.position = fr.window_pos[j].pos;
+                win_node.rotation = fr.window_pos[j].rot * Quaternion(0.0, 90.0, 0.0);
+                bsitem.windows.Push(win_node);
+            }
+            Print("2c");
+            fr.bbox = BoundingBox(Vector3(-r.size.x/2 - 0.01, -0.01,  -r.size.y/2.0 - 0.01), Vector3(r.size.x/2 + 0.01, h + 0.01, r.size.y/2.0 + 0.01));
+            fr.create();
+            bsitem.model.model = fr.model;
+            bsitem.model.material = mat;
+            bsitem.model.castShadows = true;
+            bsitem.model.occluder = true;
+            bsitem.model.occludee = true;
+            bsitem.size = r.size * 0.0;
+            bsitem.height = h;
+            buildings.add(bsitem);
+            Print("2d");
+        } else
+            Print("Using cache\n");
+        Print("3");
+        bsitem.model.AddInstanceNode(ret);
+        for (int j = 0; j < bsitem.windows.length; j++)
+            bsitem.window_group.AddInstanceNode(bsitem.windows[j]);
         CollisionShape@ shape = ret.CreateComponent("CollisionShape");
-        shape.SetTriangleMesh(fr.model, 0, Vector3(1.0, 1.0, 1.0));
+        shape.SetTriangleMesh(bsitem.model.model, 0, Vector3(1.0, 1.0, 1.0));
         ret.position = Vector3(r.rect.left + r.size.x / 2.0,
                                       0,
                                       r.rect.top + r.size.y / 2.0);
         RigidBody@ body = ret.CreateComponent("RigidBody");
         body.collisionLayer = 2;
         body.collisionMask = 1;
+        Print("4");
         return ret;
     }
     
@@ -342,6 +441,8 @@ class RoadGen : ScratchModel {
         Material@ building_material = Material();
         building_material.SetTechnique(0, cache.GetResource("Technique", "Techniques/NoTexture.xml"));
         building_material.shaderParameters["MatDiffColor"] = Variant(Vector4(0.6, 0.4, 0.8, 1.0));
+        Material@ window_material1 = cache.GetResource("Material", "Models/window/window-frame.xml");
+        Material@ window_material2 = cache.GetResource("Material", "Models/window/glass.xml");
         RigidBody @body = node.CreateComponent("RigidBody");
         body.collisionLayer = 2;
         body.collisionMask = 1;
@@ -357,6 +458,7 @@ class RoadGen : ScratchModel {
 
                 node.AddChild(prect);
                 break;
+            case ITEM_SQUARE:
             case ITEM_SIDEWALK:
                 prect = render_rect(result[i], road_sidewalk_height, sidewalk_material);
                 node.AddChild(prect);
@@ -368,13 +470,22 @@ class RoadGen : ScratchModel {
             case ITEM_CITY_MID_ROADL1:
             case ITEM_LOT:
             case ITEM_BUILDING:
-                prect = render_building(result[i], 4.5 + 55.6 * Random(), building_material);
+                prect = render_building(result[i], 4.5 + 55.6 * Random(),
+                    building_material, window_material1, window_material2);
                 node.AddChild(prect);
                 node.position += Vector3(0.0, road_lane_height, 0.0);
                 break;
             }
         }
         node.position = Vector3(0, 0.2, 0);
+        Print("=== BUILDINGS: " + String(buildings.items.length));
+        for (int g = 0; g < buildings.items.length; g++) {
+            Print("building: size.x: "
+                    + String(buildings.items[g].size.x)
+                    + " size.y: " + String(buildings.items[g].size.y)
+                    + " height: " + String(buildings.items[g].height)
+            );
+        }
         return node;
     }
     

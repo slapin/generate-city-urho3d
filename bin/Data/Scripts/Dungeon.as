@@ -347,7 +347,7 @@ void Start()
     graphics.windowTitle = "Dungeon";
     RoadGen roads = RoadGen();
     engine.maxFps = 60.0;
-    roads.add(ITEM_CITY, RoadRect(-100, -100, 100, 100));
+    roads.add(ITEM_CITY, RoadRect(-600, -600, 600, 600));
     roads.print_queue();
     roads.print_result();
     Node@ roads_node = roads.build();

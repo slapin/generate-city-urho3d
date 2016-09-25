@@ -1,24 +1,34 @@
 class GeomData {
-    float[] vertex_data;
+    int lod = 0;
+    float lod_distance = 0.0;
+    Vector3[] vertex_data;
     uint16[] index_data;
     int num_vertices()
     {
-        return vertex_data.length / 6;
+        return vertex_data.length / 2;
+    }
+    int find_vertex(Vector3 v)
+    {
+        for (int i = 0; i < vertex_data.length; i+=2) {
+            if (vertex_data[i].Equals(v))
+                return i / 2;
+        }
+        return -1;
     }
     void add_vertex(Vector3 v)
     {
-        vertex_data.Push(v.x);
-        vertex_data.Push(v.y);
-        vertex_data.Push(v.z);
-        for (int i = 0; i < 3; i++)
-            vertex_data.Push(0);
-        uint16 idx = index_data.length;
+        uint16 idx;
+        idx = num_vertices();
+        vertex_data.Push(v);
+        vertex_data.Push(Vector3());
         index_data.Push(idx);
     }
 };
 
 mixin class ScratchModel {
     Array<GeomData> geom;
+    int lod = 0;
+    float lod_distance = 0.0;
     int current_geometry = 0;
     void add_geometry()
     {
@@ -44,63 +54,79 @@ mixin class ScratchModel {
         Print("Creating");
 
         for (uint g = 0; g < geom.length; g++) {
-            float[]@ vertex_data = @geom[g].vertex_data;
+            Vector3[]@ vertex_data = @geom[g].vertex_data;
+            uint16[]@ index_data = @geom[g].index_data;
+            if (geom[g].num_vertices() == 0)
+                continue;
             total_num_verts += geom[g].num_vertices();
             Print("Geometry: " + String(g) + " vertices: " + String(geom[g].num_vertices()));
-            for (uint i = 0; i < geom[g].num_vertices(); i += 3) {
-                Vector3 v1(vertex_data[6 * i], vertex_data[6 * i + 1], vertex_data[6 * i + 2]);
-                Vector3 v2(vertex_data[6 * i + 6], vertex_data[6 * i + 7], vertex_data[6 * i + 8]);
-                Vector3 v3(vertex_data[6 * i + 12], vertex_data[6 * i + 13], vertex_data[6 * i + 14]);
+            for (uint i = 0; i < geom[g].index_data.length; i += 3) {
+                Vector3 v1 = vertex_data[2 * index_data[i]];
+                Vector3 v2 = vertex_data[2 * index_data[(i + 1)]];
+                Vector3 v3 = vertex_data[2 * index_data[(i + 2)]];
 
                 Vector3 edge1 = v1 - v2;
                 Vector3 edge2 = v1 - v3;
                 Vector3 normal = edge1.CrossProduct(edge2).Normalized();
-                vertex_data[6 * i + 3] = vertex_data[6 * i + 9] = vertex_data[6 * i + 15] = normal.x;
-                vertex_data[6 * i + 4] = vertex_data[6 * i + 10] = vertex_data[6 * i + 16] = normal.y;
-                vertex_data[6 * i + 5] = vertex_data[6 * i + 11] = vertex_data[6 * i + 17] = normal.z;
+                vertex_data[2 * index_data[i] + 1] = normal;
+                vertex_data[2 * index_data[i + 1] + 1] = normal;
+                vertex_data[2 * index_data[i + 2] + 1] = normal;
             }
         }
         vb.SetSize(total_num_verts, elements);
         VectorBuffer temp;
         for (uint g = 0; g < geom.length; g++) {
             for (uint i = 0; i < geom[g].vertex_data.length; ++i)
-                temp.WriteFloat(geom[g].vertex_data[i]);
+                temp.WriteVector3(geom[g].vertex_data[i]);
         }
         vb.SetData(temp);
 
         ib.SetSize(total_num_verts, false);
         temp.Clear();
+        int num_geo = 0;
         for (uint g = 0; g < geom.length; g++) {
             for (uint i = 0; i < geom[g].num_vertices(); ++i)
                 temp.WriteUShort(geom[g].index_data[i]);
+            if (geom[g].lod == 0 && geom[g].num_vertices() > 0)
+                num_geo++;
         }
         ib.SetData(temp);
 
-        model.numGeometries = geom.length;
+        model.numGeometries = num_geo;
         int vertex_start = 0;
         int index_start = 0;
+        int geom_id = 0;
+        int lod_levels = 0;
         for (uint g = 0; g < geom.length; g++) {
+            if (geom[g].num_vertices() == 0)
+                continue;
             Geometry@ gm = Geometry();
             gm.SetVertexBuffer(0, vb);
             gm.SetIndexBuffer(ib);
             gm.SetDrawRange(TRIANGLE_LIST, index_start,
                     geom[g].num_vertices(), vertex_start,
                     geom[g].num_vertices());
-            model.SetGeometry(g, 0, gm);
+            gm.lodDistance = geom[g].lod_distance;
+            if (geom[g].lod > 0)
+                model.numGeometryLodLevels[geom_id] = model.numGeometryLodLevels[geom_id] + 1;
+            Print("lod: " + String(geom[g].lod) + " lod distance: " + String(geom[g].lod_distance));
+            if (geom[g].lod > 0)
+                model.SetGeometry(geom_id, geom[g].lod, gm);
+            else
+                model.SetGeometry(geom_id, 0, gm);
             vertex_start += geom[g].num_vertices();
             index_start += geom[g].num_vertices();
+            if (g < geom.length - 1) {
+                if (geom[g + 1].lod == 0)
+                    geom_id++;
+            }
         }
         model.boundingBox = bbox;
-    }
-    void add_vertex(Vector3 v)
-    {
-        vertex_data.Push(v.x);
-        vertex_data.Push(v.y);
-        vertex_data.Push(v.z);
-        for (int i = 0; i < 3; i++)
-            vertex_data.Push(0);
-        uint16 idx = index_data.length;
-        index_data.Push(idx);
+        Print("Model testing");
+        Print("numGeometries: " + String(model.numGeometries));
+        for (int i = 0; i < model.numGeometries; i++) {
+            Print("geometry: " + String(i) + " lods: " + String(model.numGeometryLodLevels[i]));
+        }
     }
     void add_quad0(float w, float h, float d, Matrix4 trans = Matrix4())
     {

@@ -17,7 +17,7 @@ enum roadgen_types {
     ITEM_SQUARE,
 };
 
-const float simple_dist = 100.0;
+const float simple_dist = 110.0;
 class BuildingDetailed : ScriptObject {
     StaticModelGroup@ smg;
     float passed = 0.0;
@@ -56,7 +56,7 @@ class BuildingDetailed : ScriptObject {
     void FixedUpdate(float timeStep)
     {
         passed += timeStep;
-        if (passed > 0.3) {
+        if (passed > 0.2) {
             update_setting();
             passed = 0.0;
         }
@@ -552,6 +552,8 @@ class RoadGen : ScratchModel {
         RigidBody@ body = ret.CreateComponent("RigidBody");
         body.collisionLayer = 2;
         body.collisionMask = 1;
+        body.friction = 1;
+        body.rollingFriction = 1;
         return ret;
     }
     
@@ -595,6 +597,8 @@ class RoadGen : ScratchModel {
         RigidBody @body = node.CreateComponent("RigidBody");
         body.collisionLayer = 2;
         body.collisionMask = 1;
+        body.rollingFriction = 1;
+        body.friction = 1;
         Node@ fake = node.CreateChild("fake-building");
         StaticModelGroup@ fake_smg = fake.CreateComponent("StaticModelGroup");
         fake_smg.model = cache.GetResource("Model", "Models/Box.mdl");

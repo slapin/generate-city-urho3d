@@ -1,152 +1,12 @@
 #include "Scripts/Road.as"
 #include "Scripts/CreateModels.as"
+#include "Scripts/Controller.as"
+#include "Scripts/Player.as"
 
 Scene@ sc;
-Node@ cam_node;
 Node@ charNode;
+Node@ cam_node;
 Node@ minimap_cam_node = Node();
-
-const int CTRL_FORWARD = 1;
-const int CTRL_BACK = 2;
-const int CTRL_LEFT = 4;
-const int CTRL_RIGHT = 8;
-const int CTRL_JUMP = 16;
-
-const float MOVE_FORCE = 0.8f;
-const float INAIR_MOVE_FORCE = 0.02f;
-const float BRAKE_FORCE = 0.2f;
-const float JUMP_FORCE = 7.0f;
-const float YAW_SENSITIVITY = 0.1f;
-const float INAIR_THRESHOLD_TIME = 0.1f;
-bool firstPerson = false; // First person camera flag
-
-class Character : ScriptObject {
-    // Character controls.
-    Controls controls;
-    // Grounded flag for movement.
-    bool onGround = false;
-    // Jump flag.
-    bool okToJump = true;
-    // In air timer. Due to possible physics inaccuracy, character can be off ground for max. 1/10 second and still be allowed to move.
-    float inAirTimer = 0.0f;
-
-    void Start()
-    {
-        SubscribeToEvent(node, "NodeCollision", "HandleNodeCollision");
-    }
-
-    void Load(Deserializer& deserializer)
-    {
-        controls.yaw = deserializer.ReadFloat();
-        controls.pitch = deserializer.ReadFloat();
-    }
-
-    void Save(Serializer& serializer)
-    {
-        serializer.WriteFloat(controls.yaw);
-        serializer.WriteFloat(controls.pitch);
-    }
-
-    void HandleNodeCollision(StringHash eventType, VariantMap& eventData)
-    {
-        VectorBuffer contacts = eventData["Contacts"].GetBuffer();
-
-        while (!contacts.eof)
-        {
-            Vector3 contactPosition = contacts.ReadVector3();
-            Vector3 contactNormal = contacts.ReadVector3();
-            float contactDistance = contacts.ReadFloat();
-            float contactImpulse = contacts.ReadFloat();
-
-            // If contact is below node center and pointing up, assume it's a ground contact
-            if (contactPosition.y < (node.position.y + 1.0f))
-            {
-                float level = contactNormal.y;
-                if (level > 0.75)
-                    onGround = true;
-            }
-        }
-    }
-
-    void FixedUpdate(float timeStep)
-    {
-        /// \todo Could cache the components for faster access instead of finding them each frame
-        RigidBody@ body = node.GetComponent("RigidBody");
-        AnimationController@ animCtrl = node.GetComponent("AnimationController", true);
-
-        // Update the in air timer. Reset if grounded
-        if (!onGround)
-            inAirTimer += timeStep;
-        else
-            inAirTimer = 0.0f;
-        // When character has been in air less than 1/10 second, it's still interpreted as being on ground
-        bool softGrounded = inAirTimer < INAIR_THRESHOLD_TIME;
-
-        // Update movement & animation
-        Quaternion rot = node.rotation;
-        Vector3 moveDir(0.0f, 0.0f, 0.0f);
-        Vector3 velocity = body.linearVelocity;
-        // Velocity on the XZ plane
-        Vector3 planeVelocity(velocity.x, 0.0f, velocity.z);
-
-        if (controls.IsDown(CTRL_FORWARD))
-            moveDir += Vector3(0.0f, 0.0f, 1.0f);
-        if (controls.IsDown(CTRL_BACK))
-            moveDir += Vector3(0.0f, 0.0f, -1.0f);
-        if (controls.IsDown(CTRL_LEFT))
-            moveDir += Vector3(-1.0f, 0.0f, 0.0f);
-        if (controls.IsDown(CTRL_RIGHT))
-            moveDir += Vector3(1.0f, 0.0f, 0.0f);
-
-        // Normalize move vector so that diagonal strafing is not faster
-        if (moveDir.lengthSquared > 0.0f)
-            moveDir.Normalize();
-
-        // If in air, allow control, but slower than when on ground
-        body.ApplyImpulse(rot * moveDir * (softGrounded ? MOVE_FORCE : INAIR_MOVE_FORCE));
-
-        if (softGrounded)
-        {
-            // When on ground, apply a braking force to limit maximum ground velocity
-            Vector3 brakeForce = -planeVelocity * BRAKE_FORCE;
-            body.ApplyImpulse(brakeForce);
-
-            // Jump. Must release jump control inbetween jumps
-            if (controls.IsDown(CTRL_JUMP))
-            {
-                if (okToJump)
-                {
-                    body.ApplyImpulse(Vector3(0.0f, 1.0f, 0.0f) * JUMP_FORCE);
-                    okToJump = false;
-                    animCtrl.PlayExclusive("Models/Jump01.ani", 0, false, 0.2f);
-                }
-            }
-            else
-                okToJump = true;
-        }
-
-        if (!onGround)
-        {
-            animCtrl.PlayExclusive("Models/Jump01.ani", 0, false, 0.2f);
-        }
-        else
-        {
-            // Play walk animation if moving on ground, otherwise fade it out
-            if (softGrounded && !moveDir.Equals(Vector3(0.0f, 0.0f, 0.0f)))
-            {
-                animCtrl.PlayExclusive("Models/Run.ani", 0, true, 0.2f);
-                // Set walk animation speed proportional to velocity
-                animCtrl.SetSpeed("Models/Run.ani", planeVelocity.length * 0.1f);
-            }
-            else
-                animCtrl.PlayExclusive("Models/Idle0.ani", 0, true, 0.2f);
-
-        }
-
-        // Reset grounded flag for next frame
-        onGround = false;
-    }
-};
 
 void HandleKeyUp(StringHash eventType, VariantMap& eventData)
 {
@@ -275,75 +135,17 @@ void InitMouseMode(MouseMode mode)
 }
 */
 
-Node@ CreateCharacter()
+void CreateCharacter()
 {
-    Array<String> bodyobjects = {
-        // Main body
-        "Models/Dungeon_boy:Adult_male_genitalia.mdl", "Materials/Dungeon_boy:Adult_male_genitalia:Defaultskin.xml",
-        // head
-        "Models/Dungeon_boy:Adult_male_genitalia.001.mdl", "Materials/Dungeon_boy:Adult_male_genitalia:Defaultskin.xml",
-        // hands
-        "Models/dungeon-boy-hands.mdl", "Materials/Dungeon_boy:Adult_male_genitalia:Defaultskin.xml",
-        // feet
-        "Models/dungeon-boy-feet.mdl", "Materials/Dungeon_boy:Adult_male_genitalia:Defaultskin.xml",
-        // eyebrows
-        "Models/Dungeon_boy:Eyebrow008.mdl", "Materials/Dungeon_boy:Eyebrow008:Eyebrow008.xml",
-        "Models/Dungeon_boy:High-poly.mdl", "Materials/Dungeon_boy:High-poly:Eye_brown.xml",
-        "Models/Dungeon_boy:Short04.mdl", "Materials/Dungeon_boy:Short04:Short04.xml",
-        "Models/Dungeon_boy:Teeth_shape01.mdl", "Materials/Dungeon_boy:Teeth_shape01:Teethmaterial.xml",
-        "Models/Dungeon_boy:Tongue01.mdl", "Materials/Dungeon_boy:Tongue01:Tongue01material.xml"
-    };
-
-    // Clothes
-    Array<String> clothobjects = {
-        "Models/Dungeon_boy:Male_casualsuit05.001.mdl", "Materials/Dungeon_boy:Male_casualsuit05:Male_casualsuit05.xml",
-        "Models/Dungeon_boy:Male_casualsuit05.002.mdl", "Materials/Dungeon_boy:Male_casualsuit05:Male_casualsuit05.xml",
-        "Models/Dungeon_boy:Shoes04.mdl", "Materials/Dungeon_boy:Shoes04:Shoes04.xml"
-    };
-    charNode = sc.CreateChild("Char");
-    charNode.position = Vector3(0.0f, 1.0f, 0.0f);
-    Node@ adjNode = charNode.CreateChild("AdjNode");
-    adjNode.rotation = Quaternion(-90, Vector3(0, 1, 0));
-    Print("bodyobjects.length: " + String(bodyobjects.length));
-    for (uint i = 0; i < bodyobjects.length; i += 2) {
-        AnimatedModel@ obj = adjNode.CreateComponent("AnimatedModel");
-        Print(String(i));
-        Print(String(i) + " material: " +  bodyobjects[i + 1] + " model: " + bodyobjects[i]);
-        obj.model = cache.GetResource("Model", bodyobjects[i]);
-        if (bodyobjects[i + 1].length > 0)
-            obj.material = cache.GetResource("Material", bodyobjects[i + 1]);
-        obj.castShadows = true;
-        if (i == 0)
-            obj.skeleton.GetBone("head").animated = false;	
-    }
-    for (uint i = 0; i < clothobjects.length; i += 2) {
-        AnimatedModel@ obj = adjNode.CreateComponent("AnimatedModel");
-        obj.model = cache.GetResource("Model", clothobjects[i]);
-        if (clothobjects[i + 1].length > 0)
-            obj.material = cache.GetResource("Material", clothobjects[i + 1]);
-        obj.castShadows = true;
-    }
-    adjNode.CreateComponent("AnimationController");
-    RigidBody@ body = charNode.CreateComponent("RigidBody");
-    body.collisionLayer = 1;
-    body.mass = 1.0f;
-    // Set zero angular factor so that physics doesn't turn the character on its own.
-    // Instead we will control the character yaw manually
-    body.angularFactor = Vector3(0.0f, 0.0f, 0.0f);
-
-    // Set the rigidbody to signal collision also when in rest, so that we get ground collisions properly
-    body.collisionEventMode = COLLISION_ALWAYS;
-
-    // Set a capsule shape for collision
-    CollisionShape@ shape = charNode.CreateComponent("CollisionShape");
-    shape.SetCapsule(0.7f, 1.8f, Vector3(0.0f, 0.9f, 0.0f));
-
-    // Create the character logic object, which takes care of steering the rigidbody
-    charNode.CreateScriptObject(scriptFile, "Character");
-    return charNode;
+        charNode = sc.CreateChild("Character");
+        Character@ character = cast<Character>(charNode.CreateScriptObject(scriptFile, "Character"));
+        character.Init();
 }
+
+Array<Node@> AI_cars;
 void Start()
 {
+    in_vehicle = false;
     graphics.windowTitle = "Dungeon";
     RoadGen roads = RoadGen();
     engine.maxFps = 60.0;
@@ -431,6 +233,18 @@ void Start()
 
     // Character
     CreateCharacter();
+    for (int i = 0; i < 40; i++) {
+        Node@ ncar =  sc.CreateChild("Vehicle");
+    	ncar.position = Vector3(Random(200.0), Random(50.0), Random(200.0)) - Vector3(100.0, 0.0, 100.0);
+        ncar.rotation = Quaternion(0.0, Random(180.0), 0.0);
+
+    	// Create the vehicle logic script object
+    	Vehicle@ v = cast<Vehicle>(ncar.CreateScriptObject(scriptFile, "Vehicle"));
+    	// Create the rendering and physics components
+    	v.Init();
+        AI_cars.Push(ncar);
+        v.controls.Set(CTRL_BRAKE, true);
+    }
 }
 
 bool debug_render = false;
@@ -445,57 +259,43 @@ void HandlePostRenderUpdate()
 
 void HandlePostUpdate(StringHash eventType, VariantMap& eventData)
 {
-    if (charNode is null)
-        return;
-
-    Character@ character = cast<Character>(charNode.scriptObject);
-    if (character is null)
-        return;
-    // Get camera lookat dir from character yaw + pitch
-    Quaternion rot = charNode.rotation;
-    Quaternion dir = rot * Quaternion(character.controls.pitch, Vector3(1.0f, 0.0f, 0.0f));
-
-    // Turn head to camera pitch, but limit to avoid unnatural animation
     Node@ headNode = charNode.GetChild("head", true);
-    float limitPitch = Clamp(character.controls.pitch, -45.0f, 45.0f);
-    Quaternion headDir = rot * Quaternion(limitPitch, Vector3(1.0f, 0.0f, 0.0f));
-    // This could be expanded to look at an arbitrary target, now just look at a point in front
-    Vector3 headWorldTarget = headNode.worldPosition + headDir * Vector3(0.0f, 0.0f, -1.0f);
-    headNode.LookAt(headWorldTarget, Vector3(0.0f, 1.0f, 0.0f));
     minimap_cam_node.position = Vector3(headNode.worldPosition.x, minimap_cam_node.position.y, headNode.worldPosition.z);
-    if (firstPerson)
-    {
-        // First person camera: position to the head bone + offset slightly forward & up
-        cam_node.position = headNode.worldPosition + rot * Vector3(0.0f, 0.15f, 0.2f);
-        cam_node.rotation = dir;
-    }
-    else
-    {
-        // Third person camera: position behind the character
-        Vector3 aimPoint = charNode.position + rot * Vector3(0.0f, 1.7f, 0.0f); // You can modify x Vector3 value to translate the fixed character position (indicative range[-2;2])
-
-        // Collide camera ray with static physics objects (layer bitmask 2) to ensure we see the character properly
-        Vector3 rayDir = dir * Vector3(0.0f, 0.0f, -1.0f); // For indoor scenes you can use dir * Vector3(0.0, 0.0, -0.5) to prevent camera from crossing the walls
-        float rayDistance = 5.0;
-        PhysicsRaycastResult result = sc.physicsWorld.RaycastSingle(Ray(aimPoint, rayDir), rayDistance, 2);
-        if (result.body !is null)
-            rayDistance = Min(rayDistance, result.distance);
-        rayDistance = Clamp(rayDistance, 1.0, 5.0);
-
-        cam_node.position = aimPoint + rayDir * rayDistance;
-        cam_node.rotation = dir;
-    }
+    float timeStep = eventData["TimeStep"].GetFloat();
+    CharacterCameraUpdate(sc, charNode, cam_node, timeStep);
 }
 
 void HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
     if (charNode is null)
         return;
-
+    float timeStep = eventData["TimeStep"].GetFloat();
+    handle_player_update(charNode, cam_node, timeStep);
     Character@ character = cast<Character>(charNode.scriptObject);
     if (character is null)
         return;
+    if (ui.focusElement is null)
+    {
+        // Check for loading / saving the scene
+        if (input.keyPress[KEY_F5])
+        {
+            File saveFile(fileSystem.programDir + "Data/Scenes/CharacterDemo.xml", FILE_WRITE);
+            sc.SaveXML(saveFile);
+        }
+        if (input.keyPress[KEY_F7])
+        {
+            File loadFile(fileSystem.programDir + "Data/Scenes/CharacterDemo.xml", FILE_READ);
+            sc.LoadXML(loadFile);
+            // After loading we have to reacquire the character scene node, as it has been recreated
+            // Simply find by name as there's only one of them
+            charNode = sc.GetChild("Jack", true);
+            if (charNode is null)
+               return;
+        }
+    }
 
+
+/*
     // Clear previous controls
     character.controls.Set(CTRL_FORWARD | CTRL_BACK | CTRL_LEFT | CTRL_RIGHT | CTRL_JUMP, false);
 
@@ -534,8 +334,9 @@ void HandleUpdate(StringHash eventType, VariantMap& eventData)
             // Simply find by name as there's only one of them
             charNode = sc.GetChild("Jack", true);
             if (charNode is null)
-                return;
+               return;
         }
     }
+*/
 }
 

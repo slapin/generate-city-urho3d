@@ -11,13 +11,11 @@ Sprite@ logoSprite;
 Scene@ scene_;
 uint screenJoystickIndex = M_MAX_UNSIGNED; // Screen joystick index for navigational controls (mobile platforms only)
 uint screenJoystickSettingsIndex = M_MAX_UNSIGNED; // Screen joystick index for settings (mobile platforms only)
-bool touchEnabled = false; // Flag to indicate whether touch input has been enabled
 bool paused = false; // Pause flag
 bool drawDebug = false; // Draw debug geometry flag
 Node@ cameraNode; // Camera scene node
 float yaw = 0.0f; // Camera yaw angle
 float pitch = 0.0f; // Camera pitch angle
-const float TOUCH_SENSITIVITY = 2;
 MouseMode useMouseMode_ = MM_ABSOLUTE;
 
 void SampleStart()
@@ -175,6 +173,16 @@ void HandleKeyUp(StringHash eventType, VariantMap& eventData)
         }
     }
 }
+bool debug_render = false;
+
+void HandlePostRenderUpdate()
+{
+    if (debug_render) {
+        Print("Pwaaaa");
+        renderer.DrawDebugGeometry(false);
+        scene_.physicsWorld.DrawDebugGeometry(true);
+    }
+}   
 
 void HandleKeyDown(StringHash eventType, VariantMap& eventData)
 {
@@ -185,8 +193,10 @@ void HandleKeyDown(StringHash eventType, VariantMap& eventData)
         console.Toggle();
         
     // Toggle debug HUD with F2
-    else if (key == KEY_F2)
+    else if (key == KEY_F2) {
         debugHud.ToggleAll();
+        debug_render = !debug_render;
+    }
 
     // Common rendering quality controls, only when UI has no focused element
     else if (ui.focusElement is null)

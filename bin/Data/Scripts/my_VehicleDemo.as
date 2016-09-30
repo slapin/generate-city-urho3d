@@ -5,22 +5,15 @@
 //     - Saving and loading the variables of a script object, including node & component references
 
 #include "Scripts/Sample.as"
+#include "Scripts/Controller.as"
+#include "Scripts/Player.as"
 
-const int CTRL_FORWARD = 1;
-const int CTRL_BACK = 2;
-const int CTRL_LEFT = 4;
-const int CTRL_RIGHT = 8;
-
-const float CAMERA_DISTANCE = 5.0f;
-const float YAW_SENSITIVITY = 0.1f;
-const float ENGINE_POWER = 3300.0f;
-const float DOWN_FORCE = 1000.0f;
-const float MAX_WHEEL_ANGLE = 30.5f;
 
 Node@ vehicleNode;
 
 void Start()
 {
+    in_vehicle = true;
     // Execute the common startup for samples
     SampleStart();
 
@@ -47,6 +40,7 @@ void CreateScene()
     // Create scene subsystem components
     scene_.CreateComponent("Octree");
     scene_.CreateComponent("PhysicsWorld");
+    scene_.CreateComponent("DebugRenderer");
 
     // Create camera and define viewport. Camera does not necessarily have to belong to the scene
     cameraNode = Node();
@@ -77,9 +71,9 @@ void CreateScene()
     Node@ terrainNode = scene_.CreateChild("Terrain");
     terrainNode.position = Vector3(0.0f, 0.0f, 0.0f);
     Terrain@ terrain = terrainNode.CreateComponent("Terrain");
-    terrain.patchSize = 64;
-    terrain.spacing = Vector3(2.0f, 0.4f, 2.0f); // Spacing between vertices and vertical resolution of the height map
-    terrain.smoothing = false;
+    terrain.patchSize = 16;
+    terrain.spacing = Vector3(2.0f, 0.6f, 2.0f); // Spacing between vertices and vertical resolution of the height map
+    terrain.smoothing = true;
     terrain.heightMap = cache.GetResource("Image", "Textures/HeightMap.png");
     terrain.material = cache.GetResource("Material", "Materials/Terrain.xml");
     // The terrain consists of large triangles, which fits well for occlusion rendering, as a hill can occlude all
@@ -90,11 +84,11 @@ void CreateScene()
     body.collisionLayer = 2; // Use layer bitmask 2 for static geometry
     CollisionShape@ shape = terrainNode.CreateComponent("CollisionShape");
     shape.SetTerrain();
-    body.rollingFriction = 0.7;
+    body.rollingFriction = 1;
     body.friction = 1;
 
     // Create 1000 mushrooms in the terrain. Always face outward along the terrain normal
-    const uint NUM_MUSHROOMS = 1000;
+    const uint NUM_MUSHROOMS = 1500;
     for (uint i = 0; i < NUM_MUSHROOMS; ++i)
     {
         Node@ objectNode = scene_.CreateChild("Mushroom");
@@ -116,6 +110,7 @@ void CreateScene()
     }
 }
 
+Array<Node@> AI_cars;
 void CreateVehicle()
 {
     vehicleNode = scene_.CreateChild("Vehicle");
@@ -125,6 +120,51 @@ void CreateVehicle()
     Vehicle@ vehicle = cast<Vehicle>(vehicleNode.CreateScriptObject(scriptFile, "Vehicle"));
     // Create the rendering and physics components
     vehicle.Init();
+    for (int i = 0; i < 20; i++) {
+        Node@ ncar =  scene_.CreateChild("Vehicle");
+    	ncar.position = Vector3(Random(400.0), Random(50.0), Random(400.0)) - Vector3(200.0, -210.0, -200.0);
+
+    	// Create the vehicle logic script object
+    	Vehicle@ v = cast<Vehicle>(ncar.CreateScriptObject(scriptFile, "Vehicle"));
+    	// Create the rendering and physics components
+    	v.Init();
+        AI_cars.Push(ncar);
+    }
+}
+void UpdateAIVehicles(float timeStep)
+{
+    Vector3 target = vehicleNode.position;
+    
+    for (int i = 0; i < AI_cars.length; i++) {
+        Vector3 trans =  AI_cars[i].transform.Inverse() * target;
+        
+        Vehicle@ v = cast<Vehicle>(AI_cars[i].scriptObject);
+        float current_steer = v.steering;
+        float new_steer = trans.x / trans.length;
+        float speed = v.hullBody.linearVelocity.length / timeStep;
+        if (current_steer < new_steer + 0.1) {
+                 v.controls.Set(CTRL_RIGHT, true);
+                 v.controls.Set(CTRL_LEFT, false);
+        } else if (current_steer > new_steer - 0.1) {
+                 v.controls.Set(CTRL_LEFT, true);
+                 v.controls.Set(CTRL_RIGHT, false);
+        }
+        else {
+                 v.controls.Set(CTRL_LEFT, false);
+                 v.controls.Set(CTRL_RIGHT, false);
+        }
+        if (new_steer > 0.3 || new_steer < -0.3) {
+            if (speed > 240)
+                v.controls.Set(CTRL_FORWARD, false);
+            else
+                v.controls.Set(CTRL_FORWARD, true);
+        } else if (new_steer <= 0.3 && new_steer >= -0.3) {
+            if (speed > 1640)
+                v.controls.Set(CTRL_FORWARD, false);
+            else
+                v.controls.Set(CTRL_FORWARD, true);
+        }
+    }
 }
 
 void CreateInstructions()
@@ -153,50 +193,27 @@ void SubscribeToEvents()
 
     // Unsubscribe the SceneUpdate event from base class as the camera node is being controlled in HandlePostUpdate() in this sample
     UnsubscribeFromEvent("SceneUpdate");
+
+    SubscribeToEvent("PostRenderUpdate", "HandlePostRenderUpdate");
 }
 
 void HandleUpdate(StringHash eventType, VariantMap& eventData)
 {
+    float timeStep = eventData["TimeStep"].GetFloat();
     if (vehicleNode is null)
         return;
 
-    Vehicle@ vehicle = cast<Vehicle>(vehicleNode.scriptObject);
-    if (vehicle is null)
-        return;
+    handle_player_update(vehicleNode, cameraNode, timeStep);
+
+//    Vehicle@ vehicle = cast<Vehicle>(vehicleNode.scriptObject);
+//    if (vehicle is null)
+//        return;
 
     // Get movement controls and assign them to the vehicle component. If UI has a focused element, clear controls
     if (ui.focusElement is null)
     {
-        vehicle.controls.Set(CTRL_FORWARD, input.keyDown[KEY_W]);
-        vehicle.controls.Set(CTRL_BACK, input.keyDown[KEY_S]);
-        vehicle.controls.Set(CTRL_LEFT, input.keyDown[KEY_A]);
-        vehicle.controls.Set(CTRL_RIGHT, input.keyDown[KEY_D]);
-
-        // Add yaw & pitch from the mouse motion. Used only for the camera, does not affect motion
-        if (touchEnabled)
-        {
-            for (uint i = 0; i < input.numTouches; ++i)
-            {
-                TouchState@ state = input.touches[i];
-                if (state.touchedElement is null) // Touch on empty space
-                {
-                    Camera@ camera = cameraNode.GetComponent("Camera");
-                    if (camera is null)
-                        return;
-
-                    vehicle.controls.yaw += TOUCH_SENSITIVITY * camera.fov / graphics.height * state.delta.x;
-                    vehicle.controls.pitch += TOUCH_SENSITIVITY * camera.fov / graphics.height * state.delta.y;
-                }
-            }
-        }
-        else
-        {
-            vehicle.controls.yaw += input.mouseMoveX * YAW_SENSITIVITY;
-            vehicle.controls.pitch += input.mouseMoveY * YAW_SENSITIVITY;
-        }
-        // Limit pitch
-        vehicle.controls.pitch = Clamp(vehicle.controls.pitch, 0.0f, 80.0f);
-
+        UpdateAIVehicles(timeStep);
+/*
         // Check for loading / saving the scene
         if (input.keyPress[KEY_F5])
         {
@@ -211,234 +228,15 @@ void HandleUpdate(StringHash eventType, VariantMap& eventData)
             // Simply find by name as there's only one of them
             vehicleNode = scene_.GetChild("Vehicle", true);
         }
+*/
     }
-    else
-        vehicle.controls.Set(CTRL_FORWARD | CTRL_BACK | CTRL_LEFT | CTRL_RIGHT, false);
 }
 
 void HandlePostUpdate(StringHash eventType, VariantMap& eventData)
 {
-    if (vehicleNode is null)
-        return;
+    float timeStep = eventData["TimeStep"].GetFloat();
+    VehicleCameraUpdate(scene_, vehicleNode, cameraNode, timeStep);
 
-    Vehicle@ vehicle = cast<Vehicle>(vehicleNode.scriptObject);
-    if (vehicle is null)
-        return;
-
-    // Physics update has completed. Position camera behind vehicle
-    Quaternion dir(vehicleNode.rotation.yaw, Vector3(0.0f, 1.0f, 0.0f));
-    dir = dir * Quaternion(vehicle.controls.yaw, Vector3(0.0f, 1.0f, 0.0f));
-    dir = dir * Quaternion(vehicle.controls.pitch, Vector3(1.0f, 0.0f, 0.0f));
-
-    Vector3 cameraTargetPos = vehicleNode.position - dir * Vector3(0.0f, 0.0f, CAMERA_DISTANCE);
-    Vector3 cameraStartPos = vehicleNode.position;
-
-    // Raycast camera against static objects (physics collision mask 2)
-    // and move it closer to the vehicle if something in between
-    Ray cameraRay(cameraStartPos, (cameraTargetPos - cameraStartPos).Normalized());
-    float cameraRayLength = (cameraTargetPos - cameraStartPos).length;
-    bool have_bottom = false;
-    PhysicsRaycastResult result = scene_.physicsWorld.RaycastSingle(cameraRay, cameraRayLength, 2);
-    if (result.body !is null) {
-        Print("hit layer " + String(result.body.collisionLayer));
-//        cameraTargetPos = cameraStartPos + cameraRay.direction * (result.distance - 0.5f);
-    }
-    result = scene_.physicsWorld.RaycastSingle(cameraRay, cameraRayLength, 1);
-    if (result.body !is null) {
-        Print("hit layer " + String(result.body.collisionLayer));
-        cameraTargetPos -= cameraRay.direction * (result.distance);
-    }
-    Ray bottom_ray(cameraTargetPos, Vector3(0, -1, 0));
-    result = scene_.physicsWorld.RaycastSingle(bottom_ray, CAMERA_DISTANCE * 2, 2);
-    if (result.body !is null) {
-        if (result.distance < 2.0)
-            cameraTargetPos.y += 4.0 - result.distance;
-        Print("hit layer bottom " + String(result.body.collisionLayer));
-        have_bottom = true;
-    }
-    Ray top_ray(cameraTargetPos, Vector3(0, 1, 0));
-    result = scene_.physicsWorld.RaycastSingle(bottom_ray, CAMERA_DISTANCE * 2, 2);
-    if (result.body !is null && !have_bottom) {
-        cameraTargetPos.y = cameraNode.position.y;
-        Print("hit layer top " + String(result.body.collisionLayer));
-    }
-    if ((vehicleNode.position - cameraTargetPos).length < CAMERA_DISTANCE)
-        cameraTargetPos -= (vehicleNode.position - cameraTargetPos).Normalized() * (CAMERA_DISTANCE + 0.5);
-
-//    if (cameraTargetPos.y < 5.0)
-//        cameraTargetPos.y = 5.0;
-
-    cameraNode.position += (cameraTargetPos - cameraNode.position) / 50.0;
-    cameraNode.rotation = dir; // cameraNode.rotation + (dir - cameraNode.rotation);
-}
-
-// Vehicle script object class
-//
-// When saving, the node and component handles are automatically converted into nodeID or componentID attributes
-// and are acquired from the scene when loading. The steering member variable will likewise be saved automatically.
-// The Controls object can not be automatically saved, so handle it manually in the Load() and Save() methods
-
-class Vehicle : ScriptObject
-{
-    Node@ frontLeft;
-    Node@ frontRight;
-    Node@ rearLeft;
-    Node@ rearRight;
-    Constraint@ frontLeftAxis;
-    Constraint@ frontRightAxis;
-    RigidBody@ hullBody;
-    RigidBody@ frontLeftBody;
-    RigidBody@ frontRightBody;
-    RigidBody@ rearLeftBody;
-    RigidBody@ rearRightBody;
-
-    // Current left/right steering amount (-1 to 1.)
-    float steering = 0.0f;
-    // Vehicle controls.
-    Controls controls;
-
-    void Load(Deserializer& deserializer)
-    {
-        controls.yaw = deserializer.ReadFloat();
-        controls.pitch = deserializer.ReadFloat();
-    }
-
-    void Save(Serializer& serializer)
-    {
-        serializer.WriteFloat(controls.yaw);
-        serializer.WriteFloat(controls.pitch);
-    }
-
-    void Init()
-    {
-        // This function is called only from the main program when initially creating the vehicle, not on scene load
-        Node@ correction_node = node.CreateChild("corection");
-        StaticModel@ hullObject = correction_node.CreateComponent("StaticModel");
-        correction_node.rotation = Quaternion(0, 180, 0);
-        correction_node.position = Vector3(0.0, -0.9, 0.0);
-        hullBody = node.CreateComponent("RigidBody");
-        CollisionShape@ hullShape = node.CreateComponent("CollisionShape");
-
-//        node.scale = Vector3(1.5f, 1.0f, 3.0f);
-        hullObject.model = cache.GetResource("Model", "Models/car/Models/car_hull1.mdl");
-        hullObject.material = cache.GetResource("Material", "Models/car/Materials/hull_material.xml");
-        hullObject.castShadows = true;
-        hullShape.SetConvexHull(hullObject.model, 0, Vector3(1, 1, 1), correction_node.position, correction_node.rotation);
-        hullBody.mass = 1800.0f;
-        hullBody.linearDamping = 0.2f; // Some air resistance
-        hullBody.angularDamping = 0.7f;
-        hullBody.collisionLayer = 1;
-
-        frontLeft = InitWheel("FrontLeft", Vector3(-0.8f, 0.2f, 1.5f) + correction_node.position);
-        frontRight = InitWheel("FrontRight", Vector3(0.8f, 0.2f, 1.5f) + correction_node.position);
-        rearLeft = InitWheel("RearLeft", Vector3(-0.8f, 0.2f, -1.4f) + correction_node.position);
-        rearRight = InitWheel("RearRight", Vector3(0.8f, 0.2f, -1.4f) + correction_node.position);
-
-        frontLeftAxis = frontLeft.GetComponent("Constraint");
-        frontRightAxis = frontRight.GetComponent("Constraint");
-        frontLeftBody = frontLeft.GetComponent("RigidBody");
-        frontRightBody = frontRight.GetComponent("RigidBody");
-        rearLeftBody = rearLeft.GetComponent("RigidBody");
-        rearRightBody = rearRight.GetComponent("RigidBody");
-    }
-
-    Node@ InitWheel(const String&in name, const Vector3&in offset)
-    {
-/*
-        Node@ wheelNode = node.CreateChild(name);
-        StaticModel@ wheelObject = wheelNode.CreateComponent("StaticModel");
-        StaticModel@ tireObject = wheelNode.CreateComponent("StaticModel");
-        wheelObject.model = cache.GetResource("Model", "Models/car/Models/rim1.mdl");
-        wheelObject.material = cache.GetResource("Material", "Models/car/Materials/rim.xml");
-        tireObject.model = cache.GetResource("Model", "Models/car/Models/tire1.mdl");
-        tireObject.material = cache.GetResource("Material", "Models/car/Materials/tire.xml");
-        wheelObject.castShadows = true;
-        tireObject.castShadows = true;
-//        wheelNode.scale = Vector3(0.8f, 0.8f, 0.8f);
-*/
-        // Note: do not parent the wheel to the hull scene node. Instead create it on the root level and let the physics
-        // constraint keep it together
-        Node@ wheelNode = scene.CreateChild(name);
-        Node@ tire_node = wheelNode.CreateChild("tire1");
-        wheelNode.position = node.LocalToWorld(offset);
-        wheelNode.rotation = node.worldRotation * (offset.x >= 0.0f ? Quaternion(0.0f, 0.0f, 0.0f) :
-            Quaternion(0.0f, 0.0f, 180.0f));
-//        wheelNode.scale = Vector3(0.8f, 0.5f, 0.8f);
-
-        StaticModel@ wheelObject = wheelNode.CreateComponent("StaticModel");
-        StaticModel@ tireObject = tire_node.CreateComponent("StaticModel");
-        RigidBody@ wheelBody = wheelNode.CreateComponent("RigidBody");
-        CollisionShape@ wheelShape = wheelNode.CreateComponent("CollisionShape");
-        Constraint@ wheelConstraint = wheelNode.CreateComponent("Constraint");
-
-        wheelObject.model = cache.GetResource("Model", "Models/car/Models/rim1.mdl");
-        wheelObject.material = cache.GetResource("Material", "Models/car/Materials/rim.xml");
-        tireObject.model = cache.GetResource("Model", "Models/car/Models/tire1.mdl");
-        tireObject.material = cache.GetResource("Material", "Models/car/Materials/tire.xml");
-        wheelObject.castShadows = true;
-        wheelShape.SetSphere(0.7f);
-        wheelBody.friction = 1;
-        wheelBody.rollingFriction = 0.7f;
-        wheelBody.mass = 10;
-        wheelBody.linearDamping = 0.2f; // Some air resistance
-        wheelBody.angularDamping = 0.75f; // Could also use rolling friction
-        wheelBody.collisionLayer = 1;
-        wheelConstraint.constraintType = CONSTRAINT_HINGE;
-        wheelConstraint.otherBody = node.GetComponent("RigidBody");
-        wheelConstraint.worldPosition = wheelNode.worldPosition; // Set constraint's both ends at wheel's location
-        wheelConstraint.axis = Vector3(1.0f, 0.0f, 0.0f); // Wheel rotates around its local Y-axis
-        wheelConstraint.otherAxis = offset.x >= 0.0f ? Vector3(1.0f, 0.0f, 0.0f) : Vector3(-1.0f, 0.0f, 0.0f); // Wheel's hull axis points either left or right
-        wheelConstraint.lowLimit = Vector2(-180.0f, 0.0f); // Let the wheel rotate freely around the axis
-        wheelConstraint.highLimit = Vector2(180.0f, 0.0f);
-        wheelConstraint.disableCollision = true; // Let the wheel intersect the vehicle hull
-
-        return wheelNode;
-    }
-
-    void FixedUpdate(float timeStep)
-    {
-        float newSteering = 0.0f;
-        float accelerator = 0.0f;
-
-        if (controls.IsDown(CTRL_LEFT))
-            newSteering = -1.0f;
-        if (controls.IsDown(CTRL_RIGHT))
-            newSteering = 1.0f;
-        if (controls.IsDown(CTRL_FORWARD))
-            accelerator = 1.0f;
-        if (controls.IsDown(CTRL_BACK))
-            accelerator = -0.5f;
-
-        // When steering, wake up the wheel rigidbodies so that their orientation is updated
-        if (newSteering != 0.0f)
-        {
-            frontLeftBody.Activate();
-            frontRightBody.Activate();
-            steering = steering * 0.95f + newSteering * 0.05f;
-        }
-        else
-            steering = steering * 0.8f + newSteering * 0.2f;
-
-        Quaternion steeringRot(0.0f, steering * MAX_WHEEL_ANGLE, 0.0f);
-
-        frontLeftAxis.otherAxis = steeringRot * Vector3(-1.0f, 0.0f, 0.0f);
-        frontRightAxis.otherAxis = steeringRot * Vector3(1.0f, 0.0f, 0.0f);
-
-        if (accelerator != 0.0f)
-        {
-            // Torques are applied in world space, so need to take the vehicle & wheel rotation into account
-            Vector3 torqueVec = Vector3(ENGINE_POWER * accelerator, 0.0f, 0.0f);
-
-            frontLeftBody.ApplyTorque(node.rotation * steeringRot * torqueVec);
-            frontRightBody.ApplyTorque(node.rotation * steeringRot * torqueVec);
-            rearLeftBody.ApplyTorque(node.rotation * torqueVec);
-            rearRightBody.ApplyTorque(node.rotation * torqueVec);
-        }
-
-        // Apply downforce proportional to velocity
-        Vector3 localVelocity = hullBody.rotation.Inverse() * hullBody.linearVelocity;
-        hullBody.ApplyForce(hullBody.rotation * Vector3(0.0f, -1.0f, 0.0f) * Abs(localVelocity.z) * DOWN_FORCE);
-    }
 }
 
 // Create XML patch instructions for screen joystick layout specific to this sample app
